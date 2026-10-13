@@ -1,60 +1,91 @@
 # Document Extraction Pipeline
 
-A small, incremental demonstration of **document ingestion, source traceability,
+An incremental demonstration of **document ingestion, source traceability,
 and (in later stages) AI-powered field extraction and deterministic validation**.
 
-## Milestone 1: Text-based PDF ingestion
+## Milestone 2: OCR fallback for scanned PDFs
 
-The current implementation extracts text blocks from **digital PDFs** using
-PyMuPDF. Each block includes a one-based page number and its bounding box in
-PDF coordinates. Image-only pages are flagged with `needs_ocr: true` rather
-than silently treated as successfully parsed documents.
+The pipeline first extracts digital text blocks with **PyMuPDF**. For pages
+containing raster images but no digital text, it can optionally use
+**Tesseract OCR** via PyMuPDF's built-in integration.
 
-It **does not yet** OCR scans, interpret tables, extract invoice fields with an
-LLM, or validate extracted values. See [architecture](docs/architecture.md).
+Both paths return the same Pydantic models, with one-based page numbers,
+bounding boxes in PDF points, and a `source` field (`pdf_text` or `ocr`).
+If OCR is disabled or cannot recognize any text on an image-only page,
+`needs_ocr` remains `true`.
+
+See the [architecture diagram](docs/architecture.md) for the full flow and
+current limitations.
 
 ### Install
 
-Requires Python 3.11 or newer.
+Requires Python 3.11+ and, for OCR, the **Tesseract executable and language data**.
+Tesseract is a system dependency, not a pip package.
+
+Ubuntu/Debian:
+
+```bash
+sudo apt-get install tesseract-ocr tesseract-ocr-eng tesseract-ocr-deu
+```
+
+macOS (Homebrew):
+
+```bash
+brew install tesseract tesseract-lang
+```
+
+Check installed languages with `tesseract --list-langs`. The default is English;
+use `--language deu+eng` for German and English receipts.
+
+Create a virtual environment and install the Python project:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
-pip install -e '.[dev]'
+python -m pip install -e ".[dev]"
 ```
 
 ### Try it
 
+For a digital PDF:
+
 ```bash
 python -m document_extraction_pipeline path/to/invoice.pdf
-pytest
 ```
 
-The CLI emits JSON, including text blocks and their source locations:
+For a scanned PDF:
+
+```bash
+python -m document_extraction_pipeline path/to/scanned-invoice.pdf --ocr --language deu+eng
+```
+
+Run tests:
+
+```bash
+python -m pytest -v
+```
+
+A sample text block looks like this (coordinates are illustrative):
 
 ```json
 {
-  "filename": "invoice.pdf",
-  "pages": [
-    {
-      "number": 1,
-      "blocks": [
-        {"id": "p1-b0", "page": 1, "bbox": [72.0, 60.0, 220.0, 76.0], "text": "Invoice: INV-123"}
-      ],
-      "needs_ocr": false
-    }
-  ]
+  "id": "p1-b0",
+  "page": 1,
+  "bbox": [72.0, 60.0, 220.0, 76.0],
+  "text": "Total: 119.00 EUR",
+  "source": "ocr"
 }
 ```
 
-The example above is illustrative; actual bounding boxes depend on the PDF.
+**Limitations:** OCR is currently used only on pages without extractable digital
+text. Mixed pages, reading order, table understanding, confidence scores, LLM
+field extraction, and evidence validation are future work.
 
 ## Next milestones
 
-1. OCR fallback for scanned or mixed-content documents.
-2. Structured LLM extraction (e.g. supplier, total, and currency).
-3. Source-based verification, validation, and meaningful error handling.
-4. API, reproducible sample fixtures, and evaluation metrics.
+1. Structured LLM extraction (e.g. supplier, total, currency).
+2. Source-based verification and arithmetic/business-rule validation.
+3. API, reproducible fixtures, and evaluation metrics.
 
 **Privacy:** Do not commit personal receipts, customer documents, or API keys.
 Local documents should remain in `data/` or `samples/private/`, which are ignored.

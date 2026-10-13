@@ -1,5 +1,7 @@
 """Typed representations of document content and its source locations."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -12,13 +14,16 @@ class TextBlock(BaseModel):
         description="Coordinates (x0, y0, x1, y1) in PDF points"
     )
     text: str
+    source: Literal["pdf_text", "ocr"] = Field(
+        default="pdf_text", description="Whether text was native or recognized by OCR"
+    )
 
 
 class PageContent(BaseModel):
     number: int = Field(ge=1)
     blocks: list[TextBlock]
     needs_ocr: bool = Field(
-        description="True if no text was found but the page contains raster images"
+        description="True if an image-only page still has no recognized text"
     )
 
 
