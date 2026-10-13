@@ -1,10 +1,9 @@
 name: Python CI
 
+# Run tests for pushes to every branch and for pull requests targeting any branch.
 on:
   push:
-    branches: [main, init]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
