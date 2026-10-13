@@ -6,12 +6,13 @@ and (in later stages) AI-powered field extraction and deterministic validation**
 ## Milestone 2: OCR fallback for scanned PDFs
 
 The pipeline first extracts digital text blocks with **PyMuPDF**. For pages
-containing raster images but no digital text, it can optionally use
+containing raster images and fewer than 20 non-whitespace characters of digital
+text (for example, only a stray bullet), it can optionally use
 **Tesseract OCR** via PyMuPDF's built-in integration.
 
 Both paths return the same Pydantic models, with one-based page numbers,
 bounding boxes in PDF points, and a `source` field (`pdf_text` or `ocr`).
-If OCR is disabled or cannot recognize any text on an image-only page,
+If OCR is disabled or cannot recognize text on a page needing OCR,
 `needs_ocr` remains `true`.
 
 See the [architecture diagram](docs/architecture.md) for the full flow and
@@ -77,8 +78,9 @@ A sample text block looks like this (coordinates are illustrative):
 }
 ```
 
-**Limitations:** OCR is currently used only on pages without extractable digital
-text. Mixed pages, reading order, table understanding, confidence scores, LLM
+**Limitations:** OCR is currently used only on image-containing pages with fewer than 20
+non-whitespace native text characters. Mixed pages with substantial digital
+text, reading order, table understanding, confidence scores, LLM
 field extraction, and evidence validation are future work.
 
 ## Next milestones

@@ -1,7 +1,7 @@
 """PDF ingestion with optional OCR fallback and source coordinates.
 
-Digital text is preferred. When a page has no extractable text but contains
-raster images, optional Tesseract OCR recovers text from a rendered page.
+Digital text is preferred. If an image-containing page has too little digital
+text, optional Tesseract OCR recovers text from the rendered page.
 """
 
 from pathlib import Path
@@ -14,6 +14,7 @@ MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 100
 OCR_DPI = 200
 MAX_OCR_PIXELS = 25_000_000
+MIN_NATIVE_TEXT_CHARS = 20
 
 
 class DocumentIngestionError(ValueError):
@@ -40,11 +41,11 @@ def _extract_blocks(page: pymupdf.Page, number: int, *, textpage: pymupdf.TextPa
 
 
 def ingest_pdf(path: str | Path, *, ocr: bool = False, language: str = "eng") -> IngestedDocument:
-    """Extract digital text and optionally OCR image-only pages.
+    """Extract digital text and optionally OCR pages with insufficient text.
 
     Coordinates are PDF points (not OCR pixels). OCR needs a system installation
-    of Tesseract with the requested language data. Image regions on pages that
-    already have digital text are not OCRed in this initial fallback strategy.
+    of Tesseract with the requested language data. Image regions on pages with
+    substantial digital text are not OCRed in this initial fallback strategy.
     """
     source = Path(path)
     if source.suffix.lower() != ".pdf":
@@ -67,7 +68,8 @@ def ingest_pdf(path: str | Path, *, ocr: bool = False, language: str = "eng") ->
             for number, page in enumerate(pdf, start=1):
                 blocks = _extract_blocks(page, number)
                 has_images = bool(page.get_images(full=True))
-                needs_ocr = not blocks and has_images
+                native_text = "".join(block.text.strip() for block in blocks)
+                needs_ocr = has_images and len(native_text) < MIN_NATIVE_TEXT_CHARS
                 if needs_ocr and ocr:
                     width_px = page.rect.width * OCR_DPI / 72
                     height_px = page.rect.height * OCR_DPI / 72
@@ -79,8 +81,10 @@ def ingest_pdf(path: str | Path, *, ocr: bool = False, language: str = "eng") ->
                         raise DocumentIngestionError(
                             f"OCR failed on page {number}. Install Tesseract and the '{language}' language data."
                         ) from exc
-                    blocks = _extract_blocks(page, number, textpage=textpage, source="ocr")
-                    needs_ocr = not blocks
+                    ocr_blocks = _extract_blocks(page, number, textpage=textpage, source="ocr")
+                    if ocr_blocks:
+                        blocks = ocr_blocks
+                    needs_ocr = not ocr_blocks
                 pages.append(PageContent(number=number, blocks=blocks, needs_ocr=needs_ocr))
     except (pymupdf.FileDataError, pymupdf.EmptyFileError) as exc:
         raise DocumentIngestionError("Invalid or damaged PDF") from exc

@@ -23,6 +23,36 @@ def make_scanned_pdf(path: Path) -> None:
         scanned.save(path)
 
 
+def make_scanned_pdf_with_stray_bullet(path: Path) -> None:
+    # A Word-export-like PDF: full-page scanned content plus a stray bullet.
+    make_scanned_pdf(path)
+    with pymupdf.open(path) as pdf:
+        pdf[0].insert_text((72, 72), "•", fontname="helv")
+        pdf.saveIncr()
+
+
+def test_short_native_text_on_scanned_page_needs_ocr(tmp_path: Path) -> None:
+    path = tmp_path / "scan-with-bullet.pdf"
+    make_scanned_pdf_with_stray_bullet(path)
+    result = ingest_pdf(path)
+    page = result.pages[0]
+    assert page.needs_ocr
+    assert len(page.blocks) == 1
+    assert page.blocks[0].text == "•"
+    assert page.blocks[0].source == "pdf_text"
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="Tesseract not installed")
+def test_ocr_replaces_stray_bullet_with_scanned_text(tmp_path: Path) -> None:
+    path = tmp_path / "scan-with-bullet.pdf"
+    make_scanned_pdf_with_stray_bullet(path)
+    page = ingest_pdf(path, ocr=True).pages[0]
+    assert not page.needs_ocr
+    assert page.blocks
+    assert all(block.source == "ocr" for block in page.blocks)
+    assert "INV-123" in " ".join(block.text for block in page.blocks)
+
+
 def test_ocr_is_opt_in(tmp_path: Path) -> None:
     path = tmp_path / "scan.pdf"
     make_scanned_pdf(path)

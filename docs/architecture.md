@@ -6,10 +6,10 @@ The ingestion stage works without an LLM and preserves page-level evidence.
 flowchart TD
     A[PDF] --> B[Validate file size and page count]
     B --> C[PyMuPDF digital text extraction]
-    C --> D{Text found?}
+    C --> D{At least 20 text chars?}
     D -->|Yes| E[Native text blocks]
     D -->|No, image present| F{OCR enabled?}
-    D -->|No, blank| G[Empty page]
+    D -->|No, no image| G[Keep native text or empty page]
     F -->|Yes| H[Tesseract OCR via PyMuPDF]
     F -->|No| I[needs_ocr = true]
     H --> J[OCR text blocks]
@@ -28,9 +28,11 @@ Block IDs refer to a single ingestion, not a stable cross-version identifier.
 ## Current limitations
 
 - OCR is opt-in (`--ocr`) and needs a separate Tesseract installation.
-- OCR fallback is applied only to image-containing pages **without digital text**.
-  Mixed pages with some digital text and additional scanned content are not
-  fully covered yet.
+- OCR fallback is applied only to image-containing pages with **fewer than 20
+  non-whitespace native text characters** (e.g., stray bullets). Pages with
+  substantial digital text and additional scanned content are not fully covered.
 - Text blocks are not a guarantee of correct reading order or table structure.
 - No OCR confidence scores, document field extraction, validation, or RAG yet.
-- `needs_ocr` remains true if OCR produces no text on an image-only page.
+- `needs_ocr` remains true when OCR is disabled or yields no text on a page
+  that meets the fallback criteria. Existing short native text is retained if
+  OCR yields nothing.
